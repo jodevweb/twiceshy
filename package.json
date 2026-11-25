@@ -1,6 +1,6 @@
 {
   "name": "twiceshy",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Once bitten, twice shy. Your coding agent won't repeat a bug your repository already fixed.",
   "type": "module",
   "bin": { "twiceshy": "bin/twiceshy.mjs" },

@@ -9,7 +9,7 @@
 // `.twiceshy/config.json` (`"gates": ["make check"]`) et la détection s'efface.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const has = (root, file) => existsSync(join(root, file));
@@ -84,23 +84,91 @@ function jvmGates(root) {
 	return [];
 }
 
-/** Les vérifications détectées pour un dépôt, sans rien lancer. */
-export function detectGates(root) {
+/** Les vérifications d'un dossier de projet, sans regarder ses sous-dossiers. */
+function detectAt(dir) {
 	const gates = [];
-	if (has(root, "package.json")) gates.push(...nodeGates(root));
-	gates.push(...pythonGates(root));
-	if (has(root, "go.mod")) gates.push("go vet ./...", "go test ./...");
-	if (has(root, "Cargo.toml")) gates.push("cargo test --quiet");
-	gates.push(...phpGates(root));
-	gates.push(...jvmGates(root));
-	if (has(root, "Gemfile") && has(root, "spec")) gates.push("bundle exec rspec");
-	if (has(root, "mix.exs")) gates.push("mix test");
+	if (has(dir, "package.json")) gates.push(...nodeGates(dir));
+	gates.push(...pythonGates(dir));
+	if (has(dir, "go.mod")) gates.push("go vet ./...", "go test ./...");
+	if (has(dir, "Cargo.toml")) gates.push("cargo test --quiet");
+	gates.push(...phpGates(dir));
+	gates.push(...jvmGates(dir));
+	if (has(dir, "Gemfile") && has(dir, "spec")) gates.push("bundle exec rspec");
+	if (has(dir, "mix.exs")) gates.push("mix test");
 	return gates;
 }
 
-/** Les vérifications à lancer : celles déclarées, sinon celles détectées. */
+/** Dossiers jamais pris pour des sous-projets. */
+const IGNORED_DIRS = new Set(["node_modules", ".git", "vendor", "dist", "build", "target", "venv", ".venv", "__pycache__", "coverage", "docs", "doc", "data", "assets", "public", "static", "scripts", "tmp", "work", "out"]);
+
+/** Fichiers qui font d'un dossier un projet à part entière. */
+const PROJECT_FILES = ["package.json", "pyproject.toml", "requirements.txt", "setup.py", "go.mod", "Cargo.toml", "composer.json", "pom.xml", "build.gradle", "build.gradle.kts", "Gemfile", "mix.exs"];
+
+/** Au-delà, la liste deviendrait plus lente que la relecture qu'elle remplace. */
+const MAX_SUBPROJECTS = 6;
+
+function subdirs(root, rel) {
+	try {
+		return readdirSync(join(root, rel), { withFileTypes: true })
+			.filter((entry) => entry.isDirectory() && !entry.name.startsWith(".") && !IGNORED_DIRS.has(entry.name))
+			.map((entry) => (rel ? `${rel}/${entry.name}` : entry.name));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Les vérifications détectées pour un dépôt, sans rien lancer : `[{ command, dir }]`.
+ *
+ * Un dépôt n'est pas toujours un seul projet : une API Python dans `server/`,
+ * une interface dans `web/`, des paquets dans `packages/`. Chaque sous-projet
+ * a ses propres vérifications, lancées dans son dossier, et seulement quand le
+ * changement le touche (`dir` non vide). Quand la racine est un projet Node
+ * qui a déjà ses scripts, c'est elle qui orchestre ses espaces de travail : on
+ * ne descend pas dans ses sous-projets Node.
+ */
+export function detectGates(root) {
+	const gates = detectAt(root).map((command) => ({ command, dir: "" }));
+	const rootNode = has(root, "package.json") && gates.length > 0;
+	const candidates = subdirs(root, "").flatMap((dir) =>
+		["packages", "apps", "services", "libs", "modules"].includes(dir) ? subdirs(root, dir) : [dir],
+	);
+	let found = 0;
+	for (const dir of candidates) {
+		if (found >= MAX_SUBPROJECTS) break;
+		const path = join(root, dir);
+		if (!PROJECT_FILES.some((file) => has(path, file))) continue;
+		if (rootNode && has(path, "package.json") && !PROJECT_FILES.some((f) => f !== "package.json" && has(path, f))) continue;
+		const commands = detectAt(path);
+		if (commands.length === 0) continue;
+		found++;
+		gates.push(...commands.map((command) => ({ command, dir })));
+	}
+	return gates;
+}
+
+/**
+ * Les vérifications à lancer : celles déclarées, sinon celles détectées.
+ * Une vérification déclarée est une ligne de commande (lancée à la racine) ou
+ * `{ "command": "pytest -q", "dir": "server" }`.
+ */
 export function gatesFor(root, config) {
-	return Array.isArray(config.gates) ? config.gates.filter((g) => typeof g === "string" && g.trim()) : detectGates(root);
+	if (!Array.isArray(config.gates)) return detectGates(root);
+	return config.gates
+		.map((gate) =>
+			typeof gate === "string"
+				? { command: gate, dir: "" }
+				: { command: String(gate?.command ?? ""), dir: String(gate?.dir ?? "").replace(/\\/g, "/").replace(/\/+$/, "") },
+		)
+		.filter((gate) => gate.command.trim());
+}
+
+/** Le nom d'une vérification, tel qu'on l'affiche. */
+export const gateLabel = (gate) => (gate.dir ? `${gate.dir}: ${gate.command}` : gate.command);
+
+/** Une vérification de sous-projet ne tourne que si le changement touche ce sous-projet. */
+export function gateConcerns(gate, files) {
+	return !gate.dir || files.some((file) => file.replace(/\\/g, "/").startsWith(gate.dir + "/"));
 }
 
 /** Ce qu'on garde de la sortie d'une vérification : la fin, là où sont les erreurs. */
@@ -113,11 +181,12 @@ const MAX_OUTPUT = 6_000;
  * surveiller les fichiers indéfiniment. Une vérification qui dépasse son délai
  * est arrêtée avec tous ses processus enfants, et compte comme un échec.
  */
-export function runGate(root, command, timeoutSeconds = 300) {
+export function runGate(root, gate, timeoutSeconds = 300) {
 	const started = Date.now();
+	const command = gateLabel(gate);
 	return new Promise((resolve) => {
-		const child = spawn(command, {
-			cwd: root,
+		const child = spawn(gate.command, {
+			cwd: join(root, gate.dir),
 			shell: true,
 			env: { ...process.env, CI: "1", FORCE_COLOR: "0", NO_COLOR: "1" },
 			detached: process.platform !== "win32",

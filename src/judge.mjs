@@ -16,6 +16,11 @@ import { existsSync } from "node:fs";
 
 let resolved;
 
+const SYSTEM =
+	"You are Twice Shy's reviewer. You read code and diffs from a git repository and answer precisely, " +
+	"in the requested structured format. You never modify anything. When you may read the repository, " +
+	"read only the few files you need: be quick.";
+
 /** Le binaire `claude`, ou une erreur claire s'il n'est pas installé. */
 function claudeBinary() {
 	if (resolved !== undefined) return resolved;
@@ -45,6 +50,11 @@ export function ask({ prompt, schema, cwd, model = "sonnet", tools = "", timeout
 		return Promise.reject(new Error("`claude` introuvable dans le PATH (Claude Code doit être installé)"));
 	}
 	const viaShell = /\.(cmd|bat)$/i.test(binary);
+	// Une session Claude Code ordinaire charge tout ce que l'utilisateur a
+	// installé : ses consignes globales, ses skills, ses serveurs MCP. Pour un
+	// juge, c'est du bruit, et c'est cher : mesuré le 25 novembre 2026, un appel
+	// passait de 0,074 $ à 0,005 $ en les coupant. Le juge reçoit donc une
+	// consigne courte, aucune configuration, aucun skill, aucun MCP.
 	const args = [
 		"-p",
 		"--output-format",
@@ -52,6 +62,12 @@ export function ask({ prompt, schema, cwd, model = "sonnet", tools = "", timeout
 		"--no-session-persistence",
 		"--permission-mode",
 		"default",
+		"--system-prompt",
+		SYSTEM,
+		"--setting-sources",
+		"",
+		"--disable-slash-commands",
+		"--strict-mcp-config",
 		"--settings",
 		JSON.stringify({ disableAllHooks: true }),
 		"--tools",
@@ -60,6 +76,9 @@ export function ask({ prompt, schema, cwd, model = "sonnet", tools = "", timeout
 		"Write,Edit,MultiEdit,NotebookEdit,Bash",
 	];
 	if (model) args.push("--model", model);
+	// Un juge qui explore le dépôt peut s'y perdre : un plafond par appel évite
+	// qu'un `learn` coûte dix fois le prix annoncé.
+	if (tools) args.push("--max-budget-usd", "1");
 	// Le schéma ne passe pas par un `.cmd` sans dommage : dans ce cas, il est
 	// dans le prompt et la réponse est relue comme du JSON dans le texte.
 	if (!viaShell) args.push("--json-schema", JSON.stringify(schema));

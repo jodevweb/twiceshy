@@ -195,3 +195,137 @@ Do not include features, refactors, renames, formatting, lint or type-checker fi
 
 ${list}`;
 }
+
+export const PICK_SCHEMA = {
+	type: "object",
+	properties: { picked: { type: "array", items: { type: "integer" } } },
+	required: ["picked"],
+};
+
+/**
+ * Repérer, dans tes messages aux agents, ceux qui corrigent leur code.
+ *
+ * Une correction dit ce que l'agent a mal fait et comment le faire : « non,
+ * passe par le service », « encore un any ». Une demande de fonctionnalité, une
+ * question ou un « merci » n'en sont pas.
+ */
+export function pickCorrectionsPrompt(messages) {
+	const list = messages
+		.map((m, index) => `${index}. [agent said: …${m.before.slice(-160).replace(/\s+/g, " ")}]\n   USER: ${m.text.replace(/\s+/g, " ").slice(0, 400)}`)
+		.join("\n");
+	return `Below are messages a developer sent to a coding agent, each with the end of what the agent had just said. Return the indexes of the messages that **correct the agent's code or technical approach**: they reject what it did and say how it should be done (a convention, a library to use or avoid, a pattern, a place where code belongs, a mistake it keeps making).
+
+Do not pick: new feature requests, questions, approvals, thanks, requests about the conversation itself (tone, language, length), git or workflow instructions (commit, push, branch), or corrections of facts unrelated to code. When unsure, leave it out.
+
+${list}`;
+}
+
+const CORRECTION_RULE = {
+	type: "object",
+	properties: {
+		...RULE.properties,
+		why: { type: "string", description: "What the developer had to correct, in a few words." },
+		occurrences: { type: "integer", description: "How many of the messages ask for this." },
+		quote: { type: "string", description: "One short quote from the developer, verbatim." },
+	},
+	required: [...RULE.required, "occurrences", "quote"],
+};
+
+export const CORRECTION_RULES_SCHEMA = {
+	type: "object",
+	properties: { rules: { type: "array", items: CORRECTION_RULE } },
+	required: ["rules"],
+};
+
+/** Transformer tes corrections en règles vérifiables sur un diff. */
+export function correctionRulesPrompt(corrections) {
+	const list = corrections
+		.map((m, index) => `${index}. (${m.date}) [agent said: …${m.before.slice(-240).replace(/\s+/g, " ")}]\n   DEVELOPER: ${m.text.replace(/\s+/g, " ")}`)
+		.join("\n");
+	return `A developer corrected coding agents in these messages, in this repository (you can read it with Read, Grep and Glob). Each correction says what the agent did wrong and how it should be done.
+
+Turn them into up to 6 **rules** that a reviewer can check on a future diff, so the next agent does not need to be told again:
+- one idea per rule, one short sentence (35 words at most);
+- checkable by reading a diff, without running anything;
+- specific to this codebase (check the repository to name the real helper, folder or convention);
+- merge corrections that ask for the same thing, and count them in occurrences;
+- skip corrections that only made sense for one task, and anything that is not about the code.
+
+${replyIn} Keep the quote verbatim, in the developer's language.
+
+## Corrections
+
+${list}`;
+}
+
+const DECISION_RULE = {
+	type: "object",
+	properties: {
+		...RULE.properties,
+		why: { type: "string", description: "The reason the decision gives, in a few words." },
+		ref: { type: "string", description: "Where it comes from: the document's title or file name." },
+	},
+	required: [...RULE.required, "ref"],
+};
+
+export const DECISION_RULES_SCHEMA = {
+	type: "object",
+	properties: { rules: { type: "array", items: DECISION_RULE } },
+	required: ["rules"],
+};
+
+/** Transformer les ADR et les consignes aux agents en règles vérifiables. */
+export function decisionRulesPrompt(docs) {
+	const listing = docs.map((doc) => `### ${doc.ref} (${doc.path})\n\n${doc.content}`).join("\n\n");
+	return `Below are the written decisions of this repository: Architecture Decision Records and the instructions left for coding agents (CLAUDE.md, AGENTS.md…). You can read the repository with Read, Grep and Glob.
+
+Extract up to 8 **rules** that a reviewer can check on a future diff:
+- only what these documents actually decided or require, never general advice;
+- one idea per rule, one short sentence (35 words at most), checkable by reading a diff;
+- skip what cannot be seen in code (process, meetings, how to run the app), what a compiler or linter already enforces, and superseded or rejected decisions;
+- prefer the decisions an agent is most likely to break;
+- ref says which document each rule comes from.
+
+${replyIn}
+
+## Documents
+
+${listing}`;
+}
+
+export const HEALTHY_SCHEMA = {
+	type: "object",
+	properties: {
+		verdicts: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: { rule: { type: "integer" }, flags: { type: "boolean" }, note: { type: "string" } },
+				required: ["rule", "flags", "note"],
+			},
+		},
+	},
+	required: ["verdicts"],
+};
+
+/**
+ * Une règle sur un commit récent du dépôt, accepté et en production.
+ *
+ * Ce code est réputé sain : une règle qui le signale crie au loup, ou décrit
+ * une décision que le projet ne suit plus. C'est aussi comme ça qu'on repère un
+ * ADR périmé.
+ */
+export function healthyPrompt(rules, commit) {
+	const list = rules.map((rule, index) => `${index}. ${rule.text}${rule.scope?.length ? ` (scope: ${rule.scope.join(", ")})` : ""}`).join("\n");
+	return `Here is a recent commit of this repository. For each rule below, say whether a strict reviewer applying it would flag the **added or modified lines** of this commit (flags: true). A rule whose scope does not cover these files does not flag. Keep each note to one short sentence. ${replyIn}
+
+## Rules
+
+${list}
+
+## The commit: ${commit.subject}
+
+\`\`\`diff
+${commit.diff}
+\`\`\``;
+}

@@ -1,71 +1,79 @@
 # Twice Shy
 
-**Chat échaudé craint l'eau froide.** Ton agent ne refera pas un bug que ton dépôt a déjà corrigé.
+**Chat échaudé craint l'eau froide.** Ton agent ne refera pas une erreur que ton projet a déjà payée.
 
 *[English](README.md) · Français*
 
-Twice Shy est un plugin pour [Claude Code](https://docs.claude.com/en/docs/claude-code). Il lit les bugs que ton
-dépôt a déjà corrigés, en tire des règles, **teste chaque règle sur des bugs récents qu'elle n'a jamais vus**, puis
-vérifie le travail de l'agent chaque fois qu'il dit « fini ». Si quelque chose ne va pas, l'agent est renvoyé
-corriger avec l'erreur exacte et la ligne en cause, avant que tu ne voies quoi que ce soit.
+Twice Shy est un plugin pour [Claude Code](https://docs.claude.com/en/docs/claude-code). Il apprend ce que ton
+projet attend du code à trois endroits : **les bugs déjà corrigés, les corrections que tu répètes à tes agents, et
+les décisions que tu as écrites** (ADR, `CLAUDE.md`). Il teste chaque règle avant de la garder. Ensuite, chaque fois
+que l'agent dit « fini », il lance tes vérifications et ces règles sur la modification, et renvoie l'agent tant que
+ça ne passe pas.
 
-<p align="center"><img src="docs/demo.gif" alt="Twice Shy apprend des règles à partir des anciens correctifs d'un dépôt, puis renvoie l'agent quand sa modification en enfreint une" width="820"></p>
-<p align="center"><sub>Sur un petit dépôt de démonstration. Les sorties de Twice Shy sont réelles ; l'erreur de l'agent a été tapée à
-la main, car sur un dépôt aussi petit l'agent a trouvé la bonne solution tout seul.</sub></p>
+<p align="center"><img src="docs/demo.gif" alt="Twice Shy apprend des règles à partir des bugs, des corrections et des décisions, puis renvoie l'agent tant que sa modification ne les respecte pas" width="820"></p>
+<p align="center"><sub>Sur un petit dépôt de démonstration. Les sorties de Twice Shy et l'ADR écrit par l'agent sont réels ; le bug
+d'arrondi a été tapé à la main, car sur un dépôt aussi petit l'agent a trouvé la bonne solution tout seul.</sub></p>
 
 ## Pourquoi
 
-Les agents disent souvent « corrigé, les tests passent ». Parfois, ils ne les ont pas lancés. Parfois, ils
-réintroduisent un bug que l'équipe a corrigé il y a trois mois, parce que rien dans le code ne dit pourquoi il était
-écrit comme ça.
+La semaine dernière, tu as dit à l'agent « passe par le service, pas par fetch ». L'agent d'aujourd'hui n'en sait
+rien. Ton `CLAUDE.md` dit « montants en centimes » ; rien ne le vérifie. Un ADR explique pourquoi tu as choisi une
+bibliothèque ; l'agent en ajoute une autre pour le même besoin, et personne n'écrit pourquoi.
 
-Lancer les tests quand l'agent s'arrête, beaucoup de hooks le font déjà, et Twice Shy aussi. Ce qui compte, c'est le
-reste : **des règles tirées de ton propre historique, dont l'efficacité est mesurée.**
+Les agents repartent de zéro à chaque session. Twice Shy, c'est la mémoire qui vérifie.
+
+## D'où viennent les règles
+
+| Source | Ce qu'elle lit | Une règle est gardée si… |
+|---|---|---|
+| **Tes bugs passés** | Les correctifs de tes 400 derniers commits | elle aurait détecté au moins un bug récent qu'elle n'avait jamais vu |
+| **Tes corrections** | Tes messages dans les sessions Claude Code passées de ce projet (« non, fais plutôt comme ça ») | elle ne signale pas de code sain |
+| **Tes décisions** | Les ADR, `CLAUDE.md`, `AGENTS.md`, et les documents que tu déclares | le code la suit encore ; sinon elle est signalée comme **périmée** |
+
+Les sources sont des modules (`src/sources/`) : en ajouter une, par exemple les commentaires de revue des pull
+requests, ne touche pas au reste.
+
+Toutes les règles, quelle que soit leur source, passent le même examen :
+
+- sur des **correctifs récents qu'elles n'ont jamais vus** : auraient-elles signalé le code d'avant le correctif ?
+  (bug détecté)
+- sur des **commits récents et sains** : les signaleraient-elles quand même ? (fausse alerte)
+
+Une règle tirée des bugs doit faire ses preuves ; une règle que tu as demandée doit seulement ne pas bloquer du code
+sain ; une décision écrite que les commits récents ne suivent plus n'est pas imposée mais signalée, parce que c'est
+peut-être le document qui a tort.
 
 ## Est-ce que ça marche ?
 
-Mesuré sur des dépôts open source : règles apprises sur les correctifs anciens, puis testées sur les 12 plus
-récents, que les règles n'avaient jamais vus :
+Règles apprises sur les correctifs anciens, testées sur les plus récents, qu'elles n'avaient jamais vus :
 
 | Dépôt | Langage | Bugs récents que les règles gardées auraient détectés |
 |---|---|---|
-| [spf13/cobra](https://github.com/spf13/cobra) | Go | 5 sur 12 |
+| [spf13/cobra](https://github.com/spf13/cobra) | Go | 3 à 5 sur 12, selon le passage |
 | [pallets/click](https://github.com/pallets/click) | Python | 2 sur 12 |
 
-Environ deux minutes et 1,25 $ au tarif de l'API par passage. Ces chiffres varient d'un passage à l'autre : le juge
-est un modèle de langage.
+Sur un projet jeune, l'historique est maigre : un projet de 22 commits n'a donné aucune règle tirée des bugs, mais
+14 règles tirées des corrections de son auteur et de son `CLAUDE.md`. C'est pour ça qu'il y a plusieurs sources.
 
-## Comment ça marche
+Les chiffres varient d'un passage à l'autre : le juge est un modèle de langage, et chaque score est affiché pour que
+tu le voies.
 
-**`/twiceshy:learn`** (une fois, puis quand tu veux)
-
-1. Retrouve les correctifs de bugs dans tes 400 derniers commits : `fix:` et ses variantes, en anglais ou en
-   français. Si l'équipe ne les étiquette pas, un modèle rapide lit les messages de commit et désigne ceux qui
-   réparent un bug.
-2. **Coupe l'historique en deux.** Les correctifs anciens servent à écrire les règles ; les plus récents sont mis
-   de côté pour les tester. Une règle n'est jamais notée sur le bug dont elle vient.
-3. Teste chaque règle sur chaque correctif mis de côté, dans les deux sens :
-   - avant le correctif, le code était faux : la règle l'aurait-elle signalé ? (bug détecté)
-   - après le correctif, le code est juste : la règle le signalerait-elle quand même ? (fausse alerte)
-4. Les règles qui ne détectent rien ou qui crient au loup sont réécrites une fois, puis retestées. Toujours
-   inutiles : supprimées.
-5. Enregistre celles qui restent dans `.twiceshy/rules.json`, avec leur score. Commite ce fichier : toute
-   l'équipe a les mêmes règles.
-
-**Le hook `Stop`** (chaque fois que l'agent dit qu'il a fini)
+## À chaque arrêt de l'agent
 
 1. Rien n'a changé depuis la dernière vérification réussie : l'agent s'arrête, rien n'est lancé.
-2. Lance les vérifications du projet (types, lint, tests), détectées d'après le dépôt.
-3. Demande à un juge si les lignes modifiées enfreignent une règle qui concerne les fichiers touchés.
-4. Un échec : l'agent est renvoyé avec la sortie et la ligne, et il corrige.
-5. Trois échecs de suite, ou un agent qui s'arrête sans rien avoir changé : Twice Shy le laisse s'arrêter et te dit
+2. Les vérifications du projet (types, lint, tests) tournent, détectées par sous-projet (`server/`, `web/`,
+   `packages/*`), et seulement pour les sous-projets que la modification touche.
+3. Un juge lit les lignes modifiées au regard des règles qui concernent les fichiers touchés.
+4. **L'agent a ajouté une dépendance** et le dépôt a un dossier d'ADR : il doit écrire l'ADR (pourquoi cette
+   bibliothèque, et pourquoi pas ce que le projet utilise déjà) avant de pouvoir s'arrêter.
+5. Un échec : l'agent est renvoyé avec la sortie, la ligne, et l'origine de la règle (« vient de l'ADR-0004 », ou
+   tes propres mots). Il corrige.
+6. Trois échecs de suite, ou un agent qui s'arrête sans rien avoir changé : Twice Shy le laisse s'arrêter et te dit
    en une ligne ce qui reste en échec. Il ne tourne jamais en boucle.
 
 ## Installation
 
 Il faut [Claude Code](https://docs.claude.com/en/docs/claude-code), `git` et Node.js 18 ou plus.
-
-Dans Claude Code :
 
 ```
 /plugin marketplace add jodevweb/twiceshy
@@ -78,22 +86,24 @@ Redémarre Claude Code, ouvre ton projet, puis :
 /twiceshy:learn
 ```
 
-C'est tout. À partir de là, chaque fois que l'agent s'arrête, Twice Shy vérifie son travail.
+À partir de là, chaque fois que l'agent s'arrête, Twice Shy vérifie son travail. Commite `.twiceshy/rules.json` :
+toute l'équipe a les mêmes règles.
 
 ## Commandes
 
 | Commande | Ce qu'elle fait |
 |---|---|
-| `/twiceshy:learn` | Apprend des règles à partir des anciens correctifs et les teste. Quelques minutes. |
-| `/twiceshy:status` | Affiche les règles, leur score et les vérifications lancées à chaque arrêt. |
+| `/twiceshy:learn` | Apprend des règles à partir de tes bugs, de tes corrections et de tes décisions, et les teste. Deux ou trois minutes. |
+| `/twiceshy:status` | Les règles par source, leur score, les décisions périmées, et les vérifications lancées à chaque arrêt. |
 | `/twiceshy:check` | Vérifie les modifications en cours tout de suite, sans attendre que l'agent s'arrête. |
+| `/twiceshy:adr` | Liste tes ADR et ceux que le code ne suit plus. `/twiceshy:adr init` crée `docs/adr/` avec un modèle. |
 
-Les mêmes commandes marchent hors de Claude Code : `node <dossier du plugin>/bin/twiceshy.mjs learn|status|check`.
+Les mêmes commandes marchent hors de Claude Code : `node <dossier du plugin>/bin/twiceshy.mjs learn|status|check|adr`.
 
 ## Langages
 
 Les règles sont jugées sur des diffs : elles marchent pour tous les langages. Les vérifications sont détectées
-d'après les fichiers du projet :
+d'après les fichiers du projet, à la racine et dans les sous-projets :
 
 | Stack | Vérifications détectées |
 |---|---|
@@ -105,7 +115,8 @@ d'après les fichiers du projet :
 | Java / Kotlin | Maven, Gradle |
 | Ruby, Elixir | `rspec`, `mix test` |
 
-Autre chose, ou un monorepo : déclare tes vérifications toi-même (voir plus bas).
+Les nouvelles dépendances sont repérées dans `package.json`, `composer.json`, `requirements*.txt`,
+`pyproject.toml`, `go.mod`, `Cargo.toml` et `Gemfile`.
 
 ## Configuration
 
@@ -113,7 +124,10 @@ Facultative. `.twiceshy/config.json` :
 
 ```json
 {
-  "gates": ["pnpm typecheck", "pnpm test --run"],
+  "gates": ["pnpm typecheck", { "command": "pytest -q", "dir": "server" }],
+  "documents": ["docs/conventions.md", "CONTRIBUTING.md"],
+  "sources": { "corrections": false },
+  "adr": "auto",
   "model": "sonnet",
   "maxAttempts": 3,
   "gateTimeoutSeconds": 300,
@@ -121,32 +135,35 @@ Facultative. `.twiceshy/config.json` :
 }
 ```
 
-- `gates` remplace les vérifications détectées.
-- `model` est le modèle qui écrit et juge les règles.
+- `gates` remplace les vérifications détectées. Une vérification avec un `dir` tourne dans ce dossier, seulement
+  quand la modification le touche.
+- `documents` ajoute tes propres règles écrites à la source des décisions.
+- `sources` coupe une source.
+- `adr` : `"auto"` exige un ADR pour une nouvelle dépendance si le dépôt a un dossier d'ADR ; `true` toujours ;
+  `false` jamais.
 - `enabled: false` coupe le hook pour ce dépôt sans rien désinstaller.
 
 ## Coût et confidentialité
 
-Twice Shy n'a ni serveur ni clé API. Il appelle le `claude` déjà connecté sur ta machine. Avec un abonnement Claude,
-c'est compris dans ton usage. `learn` affiche ce que le passage coûterait au tarif de l'API : autour d'un dollar sur
-un dépôt classique. Chaque vérification à l'arrêt est un appel, seulement quand du code a changé.
+Twice Shy n'a ni serveur ni clé API. Il appelle le `claude` déjà connecté sur ta machine, avec une consigne courte et
+sans tes réglages globaux, tes skills ni tes serveurs MCP, ce qui rend chaque appel peu coûteux. Avec un abonnement
+Claude, c'est compris dans ton usage ; `learn` affiche ce que le passage coûterait au tarif de l'API.
 
-Ton code va au même endroit que lorsque tu utilises Claude Code, et nulle part ailleurs.
+Il lit tes sessions Claude Code passées **de ce projet seulement**, sur ta machine, et envoie des extraits de tes
+messages au même Claude que tu utilises déjà. Pour le couper : `"sources": { "corrections": false }`.
 
 ## Limites
 
-- Le juge est un modèle de langage : il peut se tromper. C'est pour ça que chaque règle est notée sur de vrais bugs
-  avant d'être gardée, et que la note est affichée.
-- Un dépôt avec peu de correctifs dans son historique aura peu de règles. Les vérifications tournent quand même.
-- Si tes tests échouaient déjà avant que l'agent commence, Twice Shy arrête de bloquer dès que l'agent s'arrête
-  sans rien changer, et te prévient.
+- Le juge est un modèle de langage : il peut se tromper. C'est pour ça que les règles sont testées avant d'être
+  gardées, et que les scores sont affichés.
+- Une règle tirée de tes corrections peut décrire une préférence qui ne valait qu'une fois. Elle est supprimée si
+  elle signale du code sain ; sinon, retire-la de `.twiceshy/rules.json`.
+- Si tes tests échouaient déjà avant que l'agent commence, Twice Shy arrête de bloquer dès que l'agent s'arrête sans
+  rien changer, et te prévient.
 
 ## Feuille de route
 
-- Apprendre de tes propres corrections : ce que tu retouches à la main après un agent devient une règle, testée
-  d'abord sur l'historique.
-- ADR (Architecture Decision Records) : transformer les ADR existants en règles vérifiées, rédiger l'ADR quand un
-  agent prend une vraie décision d'architecture, signaler les ADR que le code ne respecte plus.
+- D'autres sources : les commentaires de revue des pull requests, les lignes que tu réécris à la main après un agent.
 - Une GitHub Action qui fait la même chose sur chaque pull request.
 
 ## Licence

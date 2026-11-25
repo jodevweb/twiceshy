@@ -1,67 +1,75 @@
 # Twice Shy
 
-**Once bitten, twice shy.** Your coding agent won't repeat a bug your repository already fixed.
+**Once bitten, twice shy.** Your coding agent won't repeat a mistake your project already paid for.
 
 *English · [Français](README.fr.md)*
 
-Twice Shy is a [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin. It reads the bugs your
-repository already fixed, turns them into rules, **proves each rule on recent bugs it has never seen**, and then
-checks your agent's work every time it says "done". When something fails, the agent is sent back with the exact
-error and the offending line, before you see anything.
+Twice Shy is a [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin. It learns what your project
+expects from three places: **the bugs you already fixed, the corrections you keep giving your agents, and the
+decisions you wrote down** (ADRs, `CLAUDE.md`). It tests every rule before keeping it. Then, each time the agent
+says "done", it runs your checks and those rules on the change, and sends the agent back until they pass.
 
-<p align="center"><img src="docs/demo.gif" alt="Twice Shy learning rules from a repository's past bug fixes, then sending the agent back when its change breaks one" width="820"></p>
-<p align="center"><sub>On a small demo repository. Twice Shy's output is real; the agent's mistake was typed by hand, because on a
-repository this small the agent got it right on its own.</sub></p>
+<p align="center"><img src="docs/demo.gif" alt="Twice Shy learning rules from past bugs, corrections and decisions, then sending the agent back until its change follows them" width="820"></p>
+<p align="center"><sub>On a small demo repository. Twice Shy's output and the agent's ADR are real; the money bug was typed by
+hand, because on a repository this small the agent got it right on its own.</sub></p>
 
 ## Why
 
-Agents say "fixed, tests pass" a lot. Sometimes they didn't run the tests. Sometimes they re-introduce a bug
-your team fixed three months ago, because nothing in the code says why it was written that way.
+You told the agent "use the service, not fetch" last week. Today's agent doesn't know. Your `CLAUDE.md` says
+"amounts in cents"; nothing checks it. An ADR explains why you picked a library; the agent adds another one for the
+same job, and nobody writes down why.
 
-Running the tests when the agent stops is easy, and plenty of hooks do it. Twice Shy does that too, but the part
-that matters is the rest: **rules that come from your own history, with a measured track record.**
+Agents start every session from zero. Twice Shy is the memory that checks.
+
+## Where the rules come from
+
+| Source | What it reads | A rule is kept if… |
+|---|---|---|
+| **Your past bugs** | Bug fixes in your last 400 commits | it would have caught at least one recent bug it never saw |
+| **Your corrections** | Your messages in past Claude Code sessions of this project ("no, do it like this") | it doesn't flag healthy code |
+| **Your decisions** | ADRs, `CLAUDE.md`, `AGENTS.md`, and any document you list | the code still follows it; otherwise it is reported as **stale** |
+
+Sources are modules (`src/sources/`): adding one, such as pull request review comments, does not touch the rest.
+
+Every rule, whatever its source, goes through the same test:
+
+- on **recent bug fixes it never saw**: would it have flagged the code before the fix? (bug caught)
+- on **recent healthy commits**: would it flag them anyway? (false alarm)
+
+Rules from bugs must prove themselves; rules you asked for only have to stay quiet on healthy code; written
+decisions that recent commits no longer follow are not enforced but reported, because the document may be the one
+that's wrong.
 
 ## Does it work?
 
-Measured on open source repositories, with rules learned from older fixes and tested on the 12 most recent ones,
-which the rules had never seen:
+Rules learned from older fixes, tested on the most recent ones, which they had never seen:
 
 | Repository | Language | Recent bugs the kept rules would have caught |
 |---|---|---|
-| [spf13/cobra](https://github.com/spf13/cobra) | Go | 5 of 12 |
+| [spf13/cobra](https://github.com/spf13/cobra) | Go | 3 to 5 of 12, depending on the run |
 | [pallets/click](https://github.com/pallets/click) | Python | 2 of 12 |
 
-About two minutes and $1.25 at API prices for each run. Numbers like these vary from one run to the next: the
-judge is a language model.
+On a young project, history is thin: a 22-commit project gave no rule from bugs, but 14 rules from its owner's
+corrections and `CLAUDE.md`. That is why there is more than one source.
 
-## How it works
+Numbers vary from one run to the next: the judge is a language model, and every score is shown so you can see it.
 
-**`/twiceshy:learn`** (once, then whenever you like)
-
-1. Finds the bug fixes in your last 400 commits: `fix:` and friends, in English or French. When the team does
-   not label them, a fast model reads the commit messages and picks the ones that repair a bug.
-2. **Splits the history in two.** Older fixes are used to write rules; the most recent ones are kept aside to
-   test them. A rule is never scored on the bug it was written from.
-3. Tests each rule on each held-out fix, both ways:
-   - before the fix, the code was wrong: would the rule have flagged it? (bug caught)
-   - after the fix, the code is right: would the rule still flag it? (false alarm)
-4. Rules that catch nothing or cry wolf are rewritten once and tested again. Still useless: dropped.
-5. Saves what survived to `.twiceshy/rules.json`, with each rule's score. Commit it: your team gets the same rules.
-
-**The `Stop` hook** (every time the agent says it's done)
+## On every stop
 
 1. Nothing changed since the last successful check: the agent stops, nothing runs.
-2. Runs your project's checks (types, lint, tests), detected from the repository.
-3. Asks a judge whether the changed lines break a rule that applies to the changed files.
-4. Anything fails: the agent is sent back with the output and the line, and fixes it.
-5. Three failed attempts in a row, or the agent stops without changing anything: Twice Shy lets it stop and
-   tells you in one line what is still failing. It never loops forever.
+2. Your project's checks (types, lint, tests) run, detected per sub-project (`server/`, `web/`, `packages/*`), and
+   only for the sub-projects the change touches.
+3. A judge reads the changed lines against the rules that apply to the changed files.
+4. **The agent added a dependency** and the repository has an ADR folder: it must write the ADR (why this library,
+   and why not what the project already uses) before it can stop.
+5. Anything fails: the agent is sent back with the output, the line, and where the rule comes from ("from ADR-0004",
+   or your own words). It fixes it.
+6. Three failed attempts, or the agent stops without changing anything: Twice Shy lets it stop and tells you in one
+   line what is still failing. It never loops forever.
 
 ## Install
 
 You need [Claude Code](https://docs.claude.com/en/docs/claude-code), `git` and Node.js 18+.
-
-In Claude Code:
 
 ```
 /plugin marketplace add jodevweb/twiceshy
@@ -74,21 +82,24 @@ Restart Claude Code, open your project, then:
 /twiceshy:learn
 ```
 
-That's it. From now on, every time the agent stops, Twice Shy checks its work.
+From now on, every time the agent stops, Twice Shy checks its work. Commit `.twiceshy/rules.json`: your team gets
+the same rules.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `/twiceshy:learn` | Learns rules from past bug fixes and tests them. A few minutes. |
-| `/twiceshy:status` | Shows the rules, their scores, and the checks that run on every stop. |
+| `/twiceshy:learn` | Learns rules from your bugs, corrections and decisions, and tests them. Two or three minutes. |
+| `/twiceshy:status` | Rules by source, their scores, stale decisions, and the checks run on every stop. |
 | `/twiceshy:check` | Checks the current changes now, without waiting for the agent to stop. |
+| `/twiceshy:adr` | Lists your ADRs and the ones the code no longer follows. `/twiceshy:adr init` creates `docs/adr/` with a template. |
 
-The same commands work outside Claude Code: `node <plugin folder>/bin/twiceshy.mjs learn|status|check`.
+The same commands work outside Claude Code: `node <plugin folder>/bin/twiceshy.mjs learn|status|check|adr`.
 
 ## Languages
 
-Rules are judged on diffs, so they work in any language. Checks are detected from the project files:
+Rules are judged on diffs, so they work in any language. Checks are detected from the project files, at the root
+and in sub-projects:
 
 | Stack | Detected checks |
 |---|---|
@@ -100,7 +111,8 @@ Rules are judged on diffs, so they work in any language. Checks are detected fro
 | Java / Kotlin | Maven, Gradle |
 | Ruby, Elixir | `rspec`, `mix test` |
 
-Anything else, or a monorepo: declare your checks yourself (see below).
+New dependencies are detected in `package.json`, `composer.json`, `requirements*.txt`, `pyproject.toml`, `go.mod`,
+`Cargo.toml` and `Gemfile`.
 
 ## Configuration
 
@@ -108,7 +120,10 @@ Optional. `.twiceshy/config.json`:
 
 ```json
 {
-  "gates": ["pnpm typecheck", "pnpm test --run"],
+  "gates": ["pnpm typecheck", { "command": "pytest -q", "dir": "server" }],
+  "documents": ["docs/conventions.md", "CONTRIBUTING.md"],
+  "sources": { "corrections": false },
+  "adr": "auto",
   "model": "sonnet",
   "maxAttempts": 3,
   "gateTimeoutSeconds": 300,
@@ -116,31 +131,34 @@ Optional. `.twiceshy/config.json`:
 }
 ```
 
-- `gates` replaces the detected checks.
-- `model` is the model used to write and judge rules.
+- `gates` replaces the detected checks. A check with a `dir` runs in that folder, only when the change touches it.
+- `documents` adds your own written rules to the decisions source.
+- `sources` turns a source off.
+- `adr`: `"auto"` asks for an ADR on new dependencies when the repository has an ADR folder; `true` always; `false`
+  never.
 - `enabled: false` turns the hook off for this repository without uninstalling anything.
 
 ## Cost and privacy
 
-Twice Shy has no server and no API key. It calls the `claude` CLI already signed in on your machine. With a Claude
-subscription, it is part of your usage. `learn` prints what the run would cost at API prices: around a dollar on a
-typical repository. Each check on stop is one call, only when code changed.
+Twice Shy has no server and no API key. It calls the `claude` CLI already signed in on your machine, with a short
+system prompt and none of your global settings, skills or MCP servers, which keeps each call cheap. With a Claude
+subscription it is part of your usage; `learn` prints what the run would cost at API prices.
 
-Your code goes to the same place it already goes when you use Claude Code, and nowhere else.
+It reads your past Claude Code sessions **for this project only**, on your machine, and sends excerpts of your
+messages to the same Claude you already use. Turn it off with `"sources": { "corrections": false }`.
 
 ## Limits
 
-- The judge is a language model: it can be wrong. That is why every rule is scored on real bugs before it is
-  kept, and why the score is shown.
-- A repository with few bug fixes in its history gets few rules. Checks still run.
+- The judge is a language model: it can be wrong. That is why rules are tested before they are kept, and why the
+  scores are shown.
+- A rule from your corrections may describe a preference that only made sense once. It is dropped if it flags
+  healthy code; otherwise delete it from `.twiceshy/rules.json`.
 - If your tests were already failing before the agent started, Twice Shy stops blocking once the agent stops
   without changing anything, and tells you.
 
 ## Roadmap
 
-- Learn from your own corrections: what you fix by hand after an agent becomes a rule, tested on history first.
-- Architecture Decision Records: turn existing ADRs into checked rules, write the ADR when an agent makes a real
-  architecture decision, flag ADRs the code no longer follows.
+- More sources: pull request review comments, the lines you rewrite by hand after an agent.
 - A GitHub Action that does the same on every pull request.
 
 ## License

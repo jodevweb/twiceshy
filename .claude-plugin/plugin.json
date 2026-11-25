@@ -1,7 +1,7 @@
 {
   "name": "twiceshy",
-  "version": "0.1.0",
-  "description": "Once bitten, twice shy. Learns from the bugs your repository already fixed, checks your agent's work every time it says it's done, and sends it back until tests and learned rules pass.",
+  "version": "0.3.0",
+  "description": "Once bitten, twice shy. Learns rules from your past bugs, your corrections to agents and your written decisions (ADR, CLAUDE.md), tests them, and checks your agent on every stop until they pass.",
   "author": { "name": "Jordan Usoulet" },
   "homepage": "https://github.com/jodevweb/twiceshy",
   "repository": "https://github.com/jodevweb/twiceshy",

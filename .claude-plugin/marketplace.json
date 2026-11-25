@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "twiceshy",
-      "description": "Learns rules from your repository's past bug fixes, proves them on bugs they never saw, and checks your agent's work on every stop.",
+      "description": "Learns rules from your past bugs, your corrections to agents and your ADRs, tests them, and checks your agent on every stop.",
       "source": "./",
       "category": "development"
     }
