@@ -1,0 +1,16 @@
+{
+  "description": "When the agent stops, runs the project's checks (tests, lint, types) and the rules learned from past bug fixes on the current changes, and sends the agent back with the exact failures until they pass (3 attempts at most).",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/twiceshy.mjs\" hook",
+            "timeout": 900
+          }
+        ]
+      }
+    ]
+  }
+}

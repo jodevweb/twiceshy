@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "twiceshy",
+  "description": "Twice Shy: your agent won't repeat a bug your repo already fixed.",
+  "owner": { "name": "Jordan Usoulet" },
+  "plugins": [
+    {
+      "name": "twiceshy",
+      "description": "Learns rules from your repository's past bug fixes, proves them on bugs they never saw, and checks your agent's work on every stop.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

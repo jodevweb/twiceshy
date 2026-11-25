@@ -1,0 +1,12 @@
+{
+  "name": "twiceshy",
+  "version": "0.1.0",
+  "description": "Once bitten, twice shy. Your coding agent won't repeat a bug your repository already fixed.",
+  "type": "module",
+  "bin": { "twiceshy": "bin/twiceshy.mjs" },
+  "files": ["bin", "src", "hooks", "commands", ".claude-plugin"],
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "repository": "github:jodevweb/twiceshy"
+}

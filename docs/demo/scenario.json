@@ -1,0 +1,260 @@
+[
+ {
+  "at": 0,
+  "type": "title",
+  "text": "~/shop · claude  (demo repository)"
+ },
+ {
+  "at": 0.2,
+  "type": "caption",
+  "text": "1 · learns from your past bugs"
+ },
+ {
+  "at": 0.8,
+  "type": "type",
+  "text": "/twiceshy:learn",
+  "cls": "prompt user",
+  "speed": 30
+ },
+ {
+  "at": 2,
+  "type": "line",
+  "text": "Twice Shy · once bitten, twice shy",
+  "cls": "bold accent"
+ },
+ {
+  "at": 2.9,
+  "type": "line",
+  "text": "✓ Reading the history · 10 bug fixes found",
+  "cls": "green"
+ },
+ {
+  "at": 3.25,
+  "type": "line",
+  "text": "  5 older fixes to learn from, 5 recent ones to test the rules on",
+  "cls": "dim"
+ },
+ {
+  "at": 4.25,
+  "type": "line",
+  "text": "✓ Writing rules from the older fixes · 4 rules proposed",
+  "cls": "green"
+ },
+ {
+  "at": 5.25,
+  "type": "line",
+  "text": "✓ Testing each rule on 5 bugs it has never seen",
+  "cls": "green"
+ },
+ {
+  "at": 5.65,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 6.15,
+  "type": "line",
+  "text": "✓ Money amounts must stay integer cents end to end: convert euro inputs only through money.js helpers, never with inline * 100 or float euro arithmetic.",
+  "cls": "bold"
+ },
+ {
+  "at": 6.5,
+  "type": "line",
+  "text": "  kept · would have caught 1 of 5 bugs",
+  "cls": "green"
+ },
+ {
+  "at": 7,
+  "type": "line",
+  "text": "✓ Every function that returns cents must round to an integer after any multiplication by a ratio, percent or weight.",
+  "cls": "bold"
+ },
+ {
+  "at": 7.35,
+  "type": "line",
+  "text": "  kept · would have caught 2 of 5 bugs",
+  "cls": "green"
+ },
+ {
+  "at": 7.85,
+  "type": "line",
+  "text": "✗ Subtracting a deduction from a total must be clamped so the result cannot go negative.",
+  "cls": "dim"
+ },
+ {
+  "at": 8.2,
+  "type": "line",
+  "text": "  dropped · caught 0 of 5 bugs, 1 false alarm",
+  "cls": "dim"
+ },
+ {
+  "at": 8.5,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 9.1,
+  "type": "line",
+  "text": "On your last 5 bug fixes, these rules would have caught 3.",
+  "cls": "bold green"
+ },
+ {
+  "at": 12.3,
+  "type": "clear"
+ },
+ {
+  "at": 12.3,
+  "type": "caption",
+  "text": "2 · checks your agent every time it says “done”"
+ },
+ {
+  "at": 12.8,
+  "type": "type",
+  "text": "Add shipping insurance: 2.5% of the order, minimum 0.99 €",
+  "cls": "prompt user",
+  "speed": 30
+ },
+ {
+  "at": 15.700000000000001,
+  "type": "line",
+  "text": "● Write src/billing/insurance.js",
+  "cls": "cyan"
+ },
+ {
+  "at": 16,
+  "type": "line",
+  "text": "    return Math.max(0.99 * 100, orderTotalCents * 0.025);",
+  "cls": "dim"
+ },
+ {
+  "at": 16.9,
+  "type": "line",
+  "text": "● Bash npm test  →  1 passed",
+  "cls": "cyan"
+ },
+ {
+  "at": 17.7,
+  "type": "line",
+  "text": "Done. Tests pass.",
+  "cls": ""
+ },
+ {
+  "at": 18.3,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 18.5,
+  "type": "line",
+  "text": "Stop hook · Twice Shy: your work is not finished.",
+  "cls": "red bold"
+ },
+ {
+  "at": 19,
+  "type": "line",
+  "text": "Project rule broken: money amounts must stay integer cents end to end.",
+  "cls": "red"
+ },
+ {
+  "at": 19.3,
+  "type": "line",
+  "text": "  src/billing/insurance.js:3  `0.99 * 100` is an inline euro-to-cents conversion",
+  "cls": "yellow"
+ },
+ {
+  "at": 19.900000000000002,
+  "type": "line",
+  "text": "Project rule broken: every function that returns cents must round to an integer.",
+  "cls": "red"
+ },
+ {
+  "at": 20.200000000000003,
+  "type": "line",
+  "text": "  src/billing/insurance.js:3  `orderTotalCents * 0.025` is returned unrounded",
+  "cls": "yellow"
+ },
+ {
+  "at": 20.500000000000004,
+  "type": "line",
+  "text": "  How to fix: use percentOf from money.js, and the integer minimum 99.",
+  "cls": "dim"
+ },
+ {
+  "at": 23.100000000000005,
+  "type": "caption",
+  "text": "3 · sends it back until it's right"
+ },
+ {
+  "at": 23.700000000000006,
+  "type": "line",
+  "text": "● Edit src/billing/insurance.js",
+  "cls": "cyan"
+ },
+ {
+  "at": 24.000000000000007,
+  "type": "line",
+  "text": "    return Math.max(99, percentOf(orderTotalCents, 2.5));",
+  "cls": "dim"
+ },
+ {
+  "at": 24.500000000000007,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 25.10000000000001,
+  "type": "line",
+  "text": "✓ Twice Shy · 1 check, 2 rules · all good",
+  "cls": "green bold"
+ },
+ {
+  "at": 28.10000000000001,
+  "type": "clear"
+ },
+ {
+  "at": 28.10000000000001,
+  "type": "caption",
+  "text": ""
+ },
+ {
+  "at": 28.20000000000001,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 28.30000000000001,
+  "type": "line",
+  "text": "<span style=\"font-size:46px\">Twice Shy</span>",
+  "cls": "bold accent",
+  "html": true
+ },
+ {
+  "at": 28.80000000000001,
+  "type": "line",
+  "text": "Once bitten, twice shy. Your agent won't repeat a bug your repo already fixed.",
+  "cls": ""
+ },
+ {
+  "at": 29.00000000000001,
+  "type": "line",
+  "text": "",
+  "cls": ""
+ },
+ {
+  "at": 29.50000000000001,
+  "type": "line",
+  "text": "/plugin marketplace add jodevweb/twiceshy",
+  "cls": "cyan"
+ },
+ {
+  "at": 29.90000000000001,
+  "type": "line",
+  "text": "Claude Code plugin · MIT · any language",
+  "cls": "dim"
+ }
+]
