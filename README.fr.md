@@ -149,7 +149,7 @@ Twice Shy n'a ni serveur ni clé API. Il appelle le `claude` déjà connecté su
 sans tes réglages globaux, tes skills ni tes serveurs MCP, ce qui rend chaque appel peu coûteux. Avec un abonnement
 Claude, c'est compris dans ton usage ; `learn` affiche ce que le passage coûterait au tarif de l'API.
 
-Il lit tes sessions Claude Code passées **de ce projet seulement**, sur ta machine, et envoie des extraits de tes
+Il lit tes sessions Claude Code passées **de ce projet et de ses worktrees git seulement**, sur ta machine, et envoie des extraits de tes
 messages au même Claude que tu utilises déjà. Pour le couper : `"sources": { "corrections": false }`.
 
 ## Limites

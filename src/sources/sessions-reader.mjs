@@ -13,11 +13,21 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { git } from "../git.mjs";
 
 const projectsDir = () => join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "projects");
 
 /** Le nom du dossier de sessions d'un projet, tel que Claude Code le forme. */
 export const sessionKey = (root) => root.replace(/[^a-zA-Z0-9]/g, "-");
+
+/** Les chemins des worktrees du dépôt, d'après `git worktree list`. */
+function worktrees(root) {
+	const out = git(root, ["worktree", "list", "--porcelain"]) ?? "";
+	return out
+		.split(/\r?\n/)
+		.filter((line) => line.startsWith("worktree "))
+		.map((line) => line.slice("worktree ".length).trim());
+}
 
 /** Sessions lues au plus : les plus récentes disent le mieux ce que tu attends aujourd'hui. */
 const MAX_SESSIONS = 60;
@@ -51,12 +61,12 @@ function isHumanText(text) {
 export function readSessions(root) {
 	const base = projectsDir();
 	if (!existsSync(base)) return [];
-	const key = sessionKey(root).toLowerCase();
-	// Les worktrees d'un projet ont leur propre dossier, dont le nom commence par celui du projet.
-	const dirs = readdirSync(base).filter((name) => {
-		const lower = name.toLowerCase();
-		return lower === key || lower.startsWith(key + "-");
-	});
+	// Le projet et ses worktrees, tels que git les déclare. On prenait d'abord
+	// tout dossier dont le nom commençait par celui du projet : un `learn` sur
+	// `cockpit` lisait alors aussi les sessions de `cockpit-notes` ou
+	// `cockpit-demo-shop`, des projets voisins qui n'avaient rien à y faire.
+	const keys = new Set([root, ...worktrees(root)].map((path) => sessionKey(path).toLowerCase()));
+	const dirs = readdirSync(base).filter((name) => keys.has(name.toLowerCase()));
 	const files = dirs
 		.flatMap((dir) => {
 			try {

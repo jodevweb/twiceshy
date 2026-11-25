@@ -144,7 +144,7 @@ Twice Shy has no server and no API key. It calls the `claude` CLI already signed
 system prompt and none of your global settings, skills or MCP servers, which keeps each call cheap. With a Claude
 subscription it is part of your usage; `learn` prints what the run would cost at API prices.
 
-It reads your past Claude Code sessions **for this project only**, on your machine, and sends excerpts of your
+It reads your past Claude Code sessions **for this project and its git worktrees only**, on your machine, and sends excerpts of your
 messages to the same Claude you already use. Turn it off with `"sources": { "corrections": false }`.
 
 ## Limits
